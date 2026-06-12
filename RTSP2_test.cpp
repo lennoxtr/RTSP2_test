@@ -3,6 +3,8 @@
 #include "RTSPClient.h"
 #include "Parser.h"
 #include <fstream>
+#define SDL_MAIN_HANDLED
+#include <SDL2/SDL.h>
 
 /* add once reading from .ini is setup
 #include <QSettings>
@@ -13,11 +15,13 @@
 
 extern "C" {
 #include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
 #include <libavutil/dict.h>
 }
 
 int main()
 {   
+    SDL_SetMainReady();
     /*
     QString path = QCoreApplication::applicationDirPath() + "/config.ini";
     QSettings settings(path, QSettings::IniFormat);
@@ -94,10 +98,15 @@ int main()
 
     // random nonsense for playing stream
 
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+    {
+        std::cerr << "SDL init failed: " << SDL_GetError() << std::endl;
+        return -1;
+    }
+
     avformat_network_init();
 
     AVFormatContext* fmtCtx = nullptr;
-
     AVDictionary* opts = nullptr;
 
     av_dict_set(&opts, "protocol_whitelist",
@@ -105,6 +114,7 @@ int main()
 
     av_dict_set(&opts, "fflags", "nobuffer", 0);
     av_dict_set(&opts, "flags", "low_delay", 0);
+    av_dict_set(&opts, "max_delay", "0", 0);
 
     int ret = avformat_open_input(
         &fmtCtx,
@@ -112,6 +122,8 @@ int main()
         nullptr,
         &opts
     );
+
+    av_dict_free(&opts);
 
     if (ret < 0)
     {
@@ -124,8 +136,6 @@ int main()
 
     std::cout << "SDP opened successfully\n";
 
-    avformat_find_stream_info(fmtCtx, nullptr);
-
     int ret2 = avformat_find_stream_info(fmtCtx, nullptr);
     if (ret2 < 0)
     {
@@ -134,17 +144,122 @@ int main()
         std::cerr << "stream info failed: " << err << std::endl;
     }
 
-    AVPacket pkt;
+    // Find video stream
+    int videoStream = -1;
 
-    while (av_read_frame(fmtCtx, &pkt) >= 0)
+    for (unsigned int i = 0; i < fmtCtx->nb_streams; i++)
     {
-        std::cout << "Got packet, stream: "
-            << pkt.stream_index
-            << " size: "
-            << pkt.size
-            << std::endl;
-
-        av_packet_unref(&pkt);
+        if (fmtCtx->streams[i]->codecpar->codec_type
+            == AVMEDIA_TYPE_VIDEO)
+        {
+            videoStream = i;
+            break;
+        }
     }
+
+    if (videoStream == -1)
+    {
+        std::cerr << "No video stream found\n";
+        return -1;
+    }
+
+    // Find decoder
+    const AVCodec* codec =
+        avcodec_find_decoder(
+            fmtCtx->streams[videoStream]
+            ->codecpar->codec_id);
+
+    if (!codec)
+    {
+        std::cerr << "Decoder not found\n";
+        return -1;
+    }
+
+    // Create decoder context
+    AVCodecContext* codecCtx =
+        avcodec_alloc_context3(codec);
+
+    avcodec_parameters_to_context(
+        codecCtx,
+        fmtCtx->streams[videoStream]->codecpar);
+
+    ret = avcodec_open2(codecCtx, codec, nullptr);
+    if (ret < 0)
+    {
+        std::cerr << "Failed to open decoder\n";
+        return -1;
+    }
+
+    AVPacket* pkt = av_packet_alloc();
+    AVFrame* frame = av_frame_alloc();
+
+    std::cout << "Waiting for RTP packets..." << std::endl;
+
+
+    SDL_Window* window = SDL_CreateWindow(
+        "RTSP Player",
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        codecCtx->width,
+        codecCtx->height,
+        SDL_WINDOW_SHOWN);
+
+    SDL_Renderer* renderer =
+        SDL_CreateRenderer(window, -1, 0);
+
+    SDL_Texture* texture =
+        SDL_CreateTexture(
+            renderer,
+            SDL_PIXELFORMAT_IYUV,
+            SDL_TEXTUREACCESS_STREAMING,
+            codecCtx->width,
+            codecCtx->height);
+
+    SDL_Event event;
+
+    while (av_read_frame(fmtCtx, pkt) >= 0)
+    {
+        if (pkt->stream_index == videoStream)
+        {   
+            ret = avcodec_send_packet(codecCtx, pkt);
+
+            if (ret >= 0)
+            {
+                while (avcodec_receive_frame(codecCtx, frame) >= 0)
+                {
+                    std::cout << frame->width << ", " << frame->height << std::endl;
+                    // -----------------------------
+                    // render frame
+                    // -----------------------------
+                    SDL_UpdateYUVTexture(
+                        texture,
+                        nullptr,
+                        frame->data[0],
+                        frame->linesize[0],
+                        frame->data[1],
+                        frame->linesize[1],
+                        frame->data[2],
+                        frame->linesize[2]);
+
+                    SDL_RenderClear(renderer);
+                    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+                    SDL_RenderPresent(renderer);
+                }
+            }
+        }
+
+        av_packet_unref(pkt);
+    }
+
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    avcodec_free_context(&codecCtx);
+    avformat_close_input(&fmtCtx);
+
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
     return 0;
 }

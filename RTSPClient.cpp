@@ -42,16 +42,6 @@ int RTSPClient::initialize_socket()
             SOCK_STREAM,
             IPPROTO_TCP);
 
-    this->rtp_socket =
-        socket(AF_INET,
-            SOCK_DGRAM,
-            IPPROTO_UDP);
-
-    this->rtcp_socket =
-        socket(AF_INET,
-            SOCK_DGRAM,
-            IPPROTO_UDP);
-
     if (this->rtsp_socket == INVALID_SOCKET)
     {
         std::cerr
@@ -60,27 +50,6 @@ int RTSPClient::initialize_socket()
             << std::endl;
 
         WSACleanup();
-        return -1;
-    }
-
-    if (this->rtp_socket == INVALID_SOCKET)
-    {
-        std::cerr
-            << "RTP socket creation failed: "
-            << WSAGetLastError()
-            << std::endl;
-
-        return -1;
-    }
-
-    if (this->rtcp_socket == INVALID_SOCKET)
-    {
-        std::cerr
-            << "RTCP socket creation failed: "
-            << WSAGetLastError()
-            << std::endl;
-
-        closesocket(this->rtp_socket);
         return -1;
     }
 
@@ -94,47 +63,6 @@ int RTSPClient::initialize_socket()
     inet_pton(AF_INET,
         this->serverIP.c_str(),
         &serverAddr.sin_addr);
-
-
-    sockaddr_in rtp_addr{};
-    rtp_addr.sin_family = AF_INET;
-    rtp_addr.sin_addr.s_addr = INADDR_ANY;
-    rtp_addr.sin_port = htons(5000);
-
-    int bindResult =
-        bind(this->rtp_socket,
-            (sockaddr*)&rtp_addr,
-            sizeof(rtp_addr));
-
-    if (bindResult == SOCKET_ERROR)
-    {
-        std::cerr
-            << "RTP bind failed: "
-            << WSAGetLastError()
-            << std::endl;
-
-        return -1;
-    }
-
-    sockaddr_in rtcp_addr{};
-    rtcp_addr.sin_family = AF_INET;
-    rtcp_addr.sin_addr.s_addr = INADDR_ANY;
-    rtcp_addr.sin_port = htons(5001);
-
-    bindResult =
-        bind(this->rtcp_socket,
-            (sockaddr*)&rtcp_addr,
-            sizeof(rtcp_addr));
-
-    if (bindResult == SOCKET_ERROR)
-    {
-        std::cerr
-            << "RTCP bind failed: "
-            << WSAGetLastError()
-            << std::endl;
-
-        return -1;
-    }
 
     // -----------------------------
     // Connect
@@ -347,9 +275,13 @@ int RTSPClient::initiate_handshake()
 
     // extract SDP for RTP stream
     std::string sdp_response(buffer);
-    std::string sdp = parse_sdp(sdp_response);
+    std::string sdp_from_server = parse_sdp(sdp_response);
+
+    //TODO: Implement dynamic port allocation
+    std::string sdp_to_player = set_sdp_port(sdp_from_server, 5000);
+
     std::ofstream file("stream.sdp");
-    file << sdp;
+    file << sdp_to_player;
     file.close();
 
     memset(buffer, 0, sizeof(buffer));

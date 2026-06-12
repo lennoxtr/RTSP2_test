@@ -94,3 +94,26 @@ std::string parse_sdp(const std::string& response)
 
     return response.substr(pos + 4);
 }
+
+std::string set_sdp_port(const std::string& sdp, int new_port)
+{
+    size_t mpos = sdp.find("m=video");
+    if (mpos == std::string::npos)
+        return sdp;
+
+    // 3. Find first space after "m=video"
+    size_t first_space = sdp.find(' ', mpos);
+    if (first_space == std::string::npos)
+        return sdp;
+
+    // 4. Find second space (end of port field)
+    size_t second_space = sdp.find(' ', first_space + 1);
+    if (second_space == std::string::npos)
+        return sdp;
+
+    // 5. Replace port
+    std::string before = sdp.substr(0, first_space + 1);
+    std::string after = sdp.substr(second_space);
+
+    return before + std::to_string(new_port) + after;
+}
