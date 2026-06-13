@@ -54,7 +54,7 @@ std::string sha256(const std::string& input)
     return hash(input, EVP_sha256());
 }
 
-std::string parse_value(const std::string& text,
+std::string parse_key_value(const std::string& text,
     const std::string& key)
 {
     size_t pos = text.find(key);
@@ -93,4 +93,18 @@ std::string parse_sdp(const std::string& response)
         return "";
 
     return response.substr(pos + 4);
+}
+
+int parse_rtsp_status_code(const std::string& response)
+{
+    size_t first_space = response.find(' ');
+    size_t second_space = response.find(' ', first_space + 1);
+
+    int rtsp_code = -1;
+    if (first_space != std::string::npos && second_space != std::string::npos) {
+        rtsp_code = std::stoi(response.substr(first_space + 1,
+            second_space - first_space - 1));
+    }
+
+    return rtsp_code;
 }
