@@ -168,11 +168,20 @@ std::string RTSPClient::set_player_port(const std::string& sdp_from_server, int 
 }
 
 std::string RTSPClient::build_auth_response(std::string control_method, std::string media_url)
-{
-    std::string ha1 = sha256(this->username + ":" + this->realm + ":" + this->password);
-    std::string ha2 = sha256(control_method + ":" + media_url);
-    std::string response = sha256(ha1 + ":" + this->nonce + ":" + ha2);
-
+{   
+    std::string response;
+    if (this->algo == "SHA-256") 
+    {
+        std::string ha1 = sha256(this->username + ":" + this->realm + ":" + this->password);
+        std::string ha2 = sha256(control_method + ":" + media_url);
+        response = sha256(ha1 + ":" + this->nonce + ":" + ha2);
+    }
+    else if (this->algo == "MD5")
+    {
+        std::string ha1 = md5(this->username + ":" + this->realm + ":" + this->password);
+        std::string ha2 = md5(control_method + ":" + media_url);
+        response = md5(ha1 + ":" + this->nonce + ":" + ha2);
+    }
     return response;
 }
 
@@ -180,7 +189,7 @@ std::string RTSPClient::build_option_request() {
     std::string option_request =
         "OPTIONS " + this->rtsp_url + " RTSP/1.0\r\n"
         "CSeq: " + std::to_string(this->Cseq_num) + "\r\n"
-        "User-Agent: LibVLC/4.0.0 - dev(LIVE555 Streaming Media v2022.07.14)\r\n"
+        "User-Agent: RTSPClient\r\n"
         "\r\n";
     return option_request;
 }
@@ -189,7 +198,7 @@ std::string RTSPClient::build_describe_request(bool is_elevated_request) {
     std::string describe_request =
         "DESCRIBE " + this->rtsp_url + " RTSP/1.0\r\n"
         "CSeq: " + std::to_string(this->Cseq_num) + "\r\n"
-        "User-Agent:LibVLC/4.0.0 - dev(LIVE555 Streaming Media v2022.07.14)\r\n"
+        "User-Agent: RTSPClient\r\n"
         "Accept: application/sdp\r\n";
 
     if (!is_elevated_request) {
@@ -219,7 +228,7 @@ std::string RTSPClient::build_setup_request(const std::string& stream_control, i
     std::string setup_request =
         "SETUP " + this->rtsp_url + stream_control + " RTSP/1.0\r\n"
         "CSeq: " + std::to_string(this->Cseq_num) + "\r\n"
-        "User-Agent:LibVLC/4.0.0 - dev(LIVE555 Streaming Media v2022.07.14)\r\n"
+        "User-Agent: RTSPClient\r\n"
         "Transport: RTP/AVP;unicast;client_port=" + std::to_string(rtp_port) + "-" + std::to_string(rtcp_port) + "\r\n"
         "Authorization: Digest username=\"" + this->username + "\", "
         "realm=\"" + this->realm + "\", "
