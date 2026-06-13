@@ -365,6 +365,7 @@ int RTSPClient::initiate_handshake()
     // extract SDP for RTP stream
     std::string sdp_response(buffer);
     std::string sdp_from_server = parse_sdp(sdp_response);
+
     this->get_stream_control(sdp_from_server);
 
     // -----------------------------
