@@ -251,6 +251,15 @@ std::string RTSPClient::build_play_request() {
     return play_request;
 }
 
+std::string RTSPClient::build_teardown_request() {
+    std::string play_request =
+        "TEARDOWN " + this->rtsp_url + " RTSP/1.0\r\n"
+        "CSeq: " + std::to_string(this->Cseq_num) + "\r\n"
+        "Session: " + this->session_id + "\r\n"
+        "\r\n";
+    return play_request;
+}
+
 int RTSPClient::get_auth_context(const std::string& server_response)
 {
     this->realm = parse_key_value(server_response, "realm");
@@ -336,22 +345,10 @@ int RTSPClient::get_rtp_port()
 int RTSPClient::initiate_handshake()
 {   
     // -----------------------------
-    // OPTION request
+    // 1ST DESCRIBE request
     // -----------------------------
     int server_response_code = -1;
     char buffer[8192] = { 0 }; //buffer for tcp response
-    std::string option_request = this->build_option_request();
-    
-    server_response_code = this->send_request(option_request, buffer, 8192);
-    if (server_response_code / 100 != 2)
-    {
-        std::cout << "OPTION FAILED WITH STATUS CODE: " << server_response_code << std::endl;
-    }
-
-    // -----------------------------
-    // 1ST DESCRIBE request
-    // -----------------------------
-    memset(buffer, 0, sizeof(buffer));
     std::string describe_request = this->build_describe_request();
     this->send_request(describe_request, buffer, 8192);
 
@@ -412,4 +409,17 @@ int RTSPClient::initiate_handshake()
         std::cout << "PLAY FAILED WITH STATUS CODE: " << server_response_code << std::endl;
     }
     return 0;
+}
+
+int RTSPClient::teardown_handshake()
+{
+    int server_response_code = -1;
+    char buffer[8192] = { 0 }; //buffer for tcp response
+    std::string teardown_request = this->build_teardown_request();
+    server_response_code = this->send_request(teardown_request, buffer, 8192);
+
+    if (server_response_code / 100 != 2)
+    {
+        std::cout << "TEARDOWN FAILED WITH STATUS CODE: " << server_response_code << std::endl;
+    }
 }

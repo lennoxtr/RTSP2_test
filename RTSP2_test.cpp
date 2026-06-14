@@ -5,13 +5,7 @@
 #include <fstream>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
-
-/* add once reading from .ini is setup
-#include <QSettings>
-#include <QCoreApplication>
-#include <QString>
-#include <QDebug>
-*/
+#include <windows.h>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -27,15 +21,15 @@ int main()
     int ONB_port = 554;
     std::string username = "admin";
     std::string password = "Password123!";
-    std::string test_URL = "rtsp://10.51.12.21:554/live/fc89be67-10d0-4c7d-8d51-66cb958ab128";
+    std::string rtsp_url = "rtsp://10.51.12.21:554/live/fc89be67-10d0-4c7d-8d51-66cb958ab128";
     std::string stream_description = "Test";
     
-    RTSPClient test_client = RTSPClient(ONB_IP, ONB_port, stream_description, test_URL, username, password);
+    RTSPClient test_client = RTSPClient(ONB_IP, ONB_port, stream_description, rtsp_url, username, password);
     test_client.initialize_socket();
     test_client.initiate_handshake();
 
     // random nonsense for playing stream
-
+    
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
         std::cerr << "SDL init failed: " << SDL_GetError() << std::endl;
@@ -73,6 +67,7 @@ int main()
     }
 
     std::cout << "SDP opened successfully\n";
+
 
     int ret2 = avformat_find_stream_info(fmtCtx, nullptr);
     if (ret2 < 0)
@@ -198,6 +193,6 @@ int main()
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-
+    
     return 0;
 }

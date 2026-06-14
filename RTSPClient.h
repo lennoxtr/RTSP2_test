@@ -12,7 +12,9 @@ public:
 
     int initialize_socket();
     int terminate_socket();
+
     int initiate_handshake();
+    int teardown_handshake();
    
     std::string get_sdp_filename()
     {
@@ -61,6 +63,7 @@ private:
     std::string build_describe_request(bool is_elevated_request = 0);
     std::string build_setup_request(const std::string& stream_control, int rtp_port, int rtcp_port);
     std::string build_play_request();
+    std::string build_teardown_request();
     std::string build_auth_response(std::string control_method, std::string media_url);
 
     // For video player
