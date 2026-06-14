@@ -30,7 +30,7 @@ int main()
 
     // random nonsense for playing stream
     
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+    if (SDL_Init(SDL_INIT_VIDEO))
     {
         std::cerr << "SDL init failed: " << SDL_GetError() << std::endl;
         return -1;
