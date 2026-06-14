@@ -21,9 +21,6 @@ RTSPClient::RTSPClient(std::string server_ip, int server_port, std::string strea
     // For Auth
     this->username = username;
     this->password = password;
-
-    // For media control
-    this->sdp_filename = stream_description + ".sdp";
 }
 
 int RTSPClient::initialize_socket()
@@ -96,6 +93,68 @@ int RTSPClient::initialize_socket()
     std::cout
         << "Connected to RTSP server\n";
 
+}
+
+int RTSPClient::get_rtp_port()
+{
+    while (true)
+    {
+        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock == INVALID_SOCKET)
+            throw std::runtime_error("Failed to create socket");
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(0); // OS picks free port
+
+        if (bind(sock, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
+        {
+            closesocket(sock);
+            throw std::runtime_error("Bind failed");
+        }
+
+        sockaddr_in boundAddr{};
+        int len = sizeof(boundAddr);
+
+        getsockname(sock, (sockaddr*)&boundAddr, &len);
+
+        int port = ntohs(boundAddr.sin_port);
+
+        closesocket(sock);
+
+        // RTP should be even
+        if (port % 2 != 0)
+            port--;
+
+        // Check if RTP and RTCP ports are both free
+        SOCKET testRtp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        SOCKET testRtcp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+        sockaddr_in rtpAddr{};
+        rtpAddr.sin_family = AF_INET;
+        rtpAddr.sin_addr.s_addr = INADDR_ANY;
+        rtpAddr.sin_port = htons(port);
+
+        sockaddr_in rtcpAddr{};
+        rtcpAddr.sin_family = AF_INET;
+        rtcpAddr.sin_addr.s_addr = INADDR_ANY;
+        rtcpAddr.sin_port = htons(port + 1);
+
+        bool rtpOk =
+            bind(testRtp, (sockaddr*)&rtpAddr, sizeof(rtpAddr))
+            != SOCKET_ERROR;
+
+        bool rtcpOk =
+            bind(testRtcp, (sockaddr*)&rtcpAddr, sizeof(rtcpAddr))
+            != SOCKET_ERROR;
+
+        closesocket(testRtp);
+        closesocket(testRtcp);
+
+        if (rtpOk && rtcpOk)
+            return port;
+    }
 }
 
 int RTSPClient::terminate_socket()
@@ -280,68 +339,6 @@ int RTSPClient::get_stream_control(const std::string& sdp_from_server)
     return 0;
 }
 
-int RTSPClient::get_rtp_port()
-{
-    while (true)
-    {
-        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock == INVALID_SOCKET)
-            throw std::runtime_error("Failed to create socket");
-
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port = htons(0); // OS picks free port
-
-        if (bind(sock, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
-        {
-            closesocket(sock);
-            throw std::runtime_error("Bind failed");
-        }
-
-        sockaddr_in boundAddr{};
-        int len = sizeof(boundAddr);
-
-        getsockname(sock, (sockaddr*)&boundAddr, &len);
-
-        int port = ntohs(boundAddr.sin_port);
-
-        closesocket(sock);
-
-        // RTP should be even
-        if (port % 2 != 0)
-            port--;
-
-        // Check if RTP and RTCP ports are both free
-        SOCKET testRtp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        SOCKET testRtcp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-        sockaddr_in rtpAddr{};
-        rtpAddr.sin_family = AF_INET;
-        rtpAddr.sin_addr.s_addr = INADDR_ANY;
-        rtpAddr.sin_port = htons(port);
-
-        sockaddr_in rtcpAddr{};
-        rtcpAddr.sin_family = AF_INET;
-        rtcpAddr.sin_addr.s_addr = INADDR_ANY;
-        rtcpAddr.sin_port = htons(port + 1);
-
-        bool rtpOk =
-            bind(testRtp, (sockaddr*)&rtpAddr, sizeof(rtpAddr))
-            != SOCKET_ERROR;
-
-        bool rtcpOk =
-            bind(testRtcp, (sockaddr*)&rtcpAddr, sizeof(rtcpAddr))
-            != SOCKET_ERROR;
-
-        closesocket(testRtp);
-        closesocket(testRtcp);
-
-        if (rtpOk && rtcpOk)
-            return port;
-    }
-}
-
 int RTSPClient::initiate_handshake()
 {   
     // -----------------------------
@@ -370,7 +367,7 @@ int RTSPClient::initiate_handshake()
 
     // extract SDP for RTP stream
     std::string sdp_response(buffer);
-    std::string sdp_from_server = parse_sdp(sdp_response);
+    this->sdp_from_server = parse_sdp(sdp_response);
 
     this->get_stream_control(sdp_from_server);
 
@@ -392,10 +389,7 @@ int RTSPClient::initiate_handshake()
     this->get_session_id(setup_response); // get session id
 
     // Write SDP for player
-    std::string sdp_to_player = this->set_player_port(sdp_from_server, rtp_port);
-    std::ofstream file(this->sdp_filename);
-    file << sdp_to_player;
-    file.close();
+    this->sdp_to_player = this->set_player_port(sdp_from_server, rtp_port);
 
     // -----------------------------
     // PLAY request

@@ -15,15 +15,15 @@ public:
 
     int initiate_handshake();
     int teardown_handshake();
-   
-    std::string get_sdp_filename()
-    {
-        return this->sdp_filename;
-    }
 
-    std::string get_stream_description()
+    const std::string& get_stream_description() const
     {
         return this->stream_description;
+    }
+
+    const std::string& get_player_sdp() const
+    {
+        return this->sdp_to_player;
     }
 
     int print_context()
@@ -56,7 +56,8 @@ private:
     // For method control
     std::string stream_control;
     std::string session_id;
-    std::string sdp_filename;
+    std::string sdp_from_server;
+    std::string sdp_to_player;
 
     // build RTSP handshake payload
     std::string build_option_request();
