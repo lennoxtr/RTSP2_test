@@ -13,59 +13,23 @@ extern "C" {
 #include <libavutil/dict.h>
 }
 
-struct SdpBuffer {
-    const char* ptr;
-    size_t size_left;
-};
-
-int read_sdp_callback(void* opaque, uint8_t* buf, int buf_size) {
-    SdpBuffer* sdp_state = static_cast<SdpBuffer*>(opaque);
-    if (sdp_state->size_left == 0) {
-        return AVERROR_EOF;
-    }
-
-    int read_bytes = (buf_size > sdp_state->size_left) ? sdp_state->size_left : buf_size;
-    memcpy(buf, sdp_state->ptr, read_bytes);
-
-    sdp_state->ptr += read_bytes;
-    sdp_state->size_left -= read_bytes;
-
-    return read_bytes;
-}
-
 int main()
 {   
     std::string ONB_IP = "10.51.12.21";
     int ONB_port = 554;
     std::string username = "admin";
     std::string password = "Password123!";
-    std::string rtsp_url = "rtsp://10.51.12.21:554/live/fc89be67-10d0-4c7d-8d51-66cb958ab128";
+    std::string rtsp_url = "rtsp://10.51.12.21:554/live/737676c9-7baf-4893-91fc-efceef7c1af8";
     std::string stream_description = "Test";
     size_t FFMPEG_IO_BUFFER_SIZE = 8192;
     
     RTSPClient rtsp_client = RTSPClient(ONB_IP, ONB_port, stream_description, rtsp_url, username, password);
     rtsp_client.initialize_socket();
     rtsp_client.initiate_handshake();
+    AVFormatContext* format_ctx = rtsp_client.get_avio_context(FFMPEG_IO_BUFFER_SIZE);
 
+    // Video Player
     avformat_network_init();
-
-    // Get sdp to player and pass to ffmpeg buffer
-    std::string sdp_content = rtsp_client.get_player_sdp();
-    SdpBuffer sdp_state = { sdp_content.c_str(), sdp_content.size()};
-
-    uint8_t* io_buffer = static_cast<uint8_t*>(av_malloc(FFMPEG_IO_BUFFER_SIZE));
-    AVIOContext* avio_ctx = avio_alloc_context(
-        io_buffer,
-        FFMPEG_IO_BUFFER_SIZE,
-        0,               // 0 for reading
-        &sdp_state,      
-        &read_sdp_callback,
-        nullptr,         // No write callback
-        nullptr          // No seek callback
-    );
-
-    AVFormatContext* format_ctx = avformat_alloc_context();
-    format_ctx->pb = avio_ctx;
     const AVInputFormat* sdp_format = av_find_input_format("sdp");
 
     AVDictionary* opts = nullptr;
@@ -219,14 +183,13 @@ int main()
 
     rtsp_client.teardown_handshake();
     rtsp_client.terminate_socket();
+    
 
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
     avformat_close_input(&format_ctx);
-
-    avio_context_free(&avio_ctx);
-    av_free(io_buffer);
+    rtsp_client.clean_avio_context();
 
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);

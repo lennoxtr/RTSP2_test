@@ -5,6 +5,18 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
+extern "C" {
+#include <libavformat/avformat.h>
+}
+
+struct SdpBuffer {
+    const char* ptr;
+    size_t size_left;
+};
+
+// parse player sdp to ffmpeg io buffer
+int read_sdp_callback(void* opaque, uint8_t* buf, int buf_size);
+
 class RTSPClient
 {
 public:
@@ -16,14 +28,13 @@ public:
     int initiate_handshake();
     int teardown_handshake();
 
+    // Parsing player sdp content to IO buffer. FFMPEG reads read from this buffer into AVIOContext
+    AVFormatContext* get_avio_context(size_t ffmpeg_io_buffer_size = 8192);
+    int clean_avio_context();
+    
     const std::string& get_stream_description() const
     {
         return this->stream_description;
-    }
-
-    const std::string& get_player_sdp() const
-    {
-        return this->sdp_to_player;
     }
 
     int print_context()
@@ -77,6 +88,10 @@ private:
     int get_auth_context(const std::string& server_response);
     int get_session_id(const std::string& server_response);
     int get_stream_control(const std::string& sdp_from_server);
+
+    //AVIO Context for FFMPEG
+    SdpBuffer sdp_state;
+    AVIOContext* avio_ctx;
 
     // allocate rtp, rtcp port
     // rtcp port = rtp port + 1

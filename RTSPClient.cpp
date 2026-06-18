@@ -7,6 +7,22 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
+int read_sdp_callback(void* opaque, uint8_t* buf, int buf_size)
+{
+    SdpBuffer* sdp_state = static_cast<SdpBuffer*>(opaque);
+    if (sdp_state->size_left == 0) {
+        return AVERROR_EOF;
+    }
+
+    int read_bytes = (buf_size > sdp_state->size_left) ? sdp_state->size_left : buf_size;
+    memcpy(buf, sdp_state->ptr, read_bytes);
+
+    sdp_state->ptr += read_bytes;
+    sdp_state->size_left -= read_bytes;
+
+    return read_bytes;
+}
+
 
 RTSPClient::RTSPClient(std::string server_ip, int server_port, std::string stream_description, std::string rtsp_url, std::string username, std::string password)
 {   
@@ -224,6 +240,34 @@ std::string RTSPClient::set_player_port(const std::string& sdp_from_server, int 
     std::string after = sdp_from_server.substr(second_space);
 
     return before + std::to_string(new_port) + after;
+}
+
+
+AVFormatContext* RTSPClient::get_avio_context(size_t ffmpeg_io_buffer_size)
+{
+    this->sdp_state = { this->sdp_to_player.c_str(), this->sdp_to_player.size() };
+    uint8_t* io_buffer = static_cast<uint8_t*>(av_malloc(ffmpeg_io_buffer_size));
+    this->avio_ctx = avio_alloc_context(
+        io_buffer,
+        ffmpeg_io_buffer_size,
+        0,               // 0 for reading
+        &sdp_state,
+        &read_sdp_callback,
+        nullptr,         // No write callback
+        nullptr          // No seek callback
+    );
+
+    AVFormatContext* format_ctx = avformat_alloc_context();
+    format_ctx->pb = avio_ctx;
+
+    return format_ctx;
+}
+
+int RTSPClient::clean_avio_context()
+{   
+    av_freep(&this->avio_ctx->buffer);
+    avio_context_free(&this->avio_ctx);
+    return 0;
 }
 
 std::string RTSPClient::build_auth_response(std::string control_method, std::string media_url)
